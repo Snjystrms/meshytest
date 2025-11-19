@@ -14,9 +14,11 @@ interface ModelViewerProps {
   progress?: number;
   /** Pass the animation_glb_url (prefer …withSkin.glb) here when ready */
   animationUrl?: string | null;
+  riggingStatus?: 'pending' | 'in_progress' | 'completed' | 'failed';
+  riggingProgress?: number;
+  animationStatus?: 'pending' | 'in_progress' | 'completed' | 'failed';
+  animationProgress?: number;
 }
-
-const LIFT = 0.02;
 
 interface AnimatedModelProps {
   modelUrl: string;
@@ -31,23 +33,23 @@ interface AnimatedModelProps {
 function AnimatedModel({ modelUrl, animationUrl, onAnimationData }: AnimatedModelProps) {
   const modelSrc = proxyAssetUrl(modelUrl);
   const hasAnim = !!animationUrl && animationUrl !== '';
-  // IMPORTANT: always pass a valid URL to hooks; if no animation, reuse the model URL.
-  const animSrc = proxyAssetUrl(hasAnim ? (animationUrl as string) : modelUrl);
+  const animSrc = hasAnim ? proxyAssetUrl(animationUrl as string) : null;
 
-  // Load both; the animation one will be used only when hasAnim is true.
   const modelGltf = useGLTF(modelSrc);
-  const animGltf = useGLTF(animSrc);
+  const animGltf = useGLTF(animSrc || modelSrc, true); // Skip loading if animSrc is null
 
-  // Choose which scene/animations to use
-  const scene = hasAnim ? animGltf.scene : modelGltf.scene;
-  const animations = useMemo(
-    () => (hasAnim ? animGltf.animations : modelGltf.animations) ?? [],
-    [hasAnim, animGltf.animations, modelGltf.animations]
-  );
+  const scene = modelGltf.scene;
+  const animations = useMemo(() => {
+    // If we have a valid animation URL and it loaded successfully with animations, use those
+    // Otherwise fall back to the model's animations
+    if (hasAnim && animGltf.animations && animGltf.animations.length > 0) {
+      return animGltf.animations;
+    }
+    return modelGltf.animations || [];
+  }, [hasAnim, animGltf.animations, modelGltf.animations]);
 
   const { actions, names, mixer } = useAnimations(animations, scene);
 
-  // Center, scale, and lift
   useEffect(() => {
     if (!scene || (scene as any).__initialized) return;
     (scene as any).__initialized = true;
@@ -64,9 +66,10 @@ function AnimatedModel({ modelUrl, animationUrl, onAnimationData }: AnimatedMode
     const scale = 2 / (maxDim || 1);
     scene.scale.setScalar(scale);
 
+    scene.updateMatrixWorld(true);
     const boxAfter = new Box3().setFromObject(scene);
     const minY = boxAfter.min.y;
-    scene.position.y += -minY + LIFT;
+    scene.position.y += -minY;
   }, [scene]);
 
   // Hand animation handles back to parent
@@ -120,6 +123,10 @@ export function ModelViewer({
   status,
   progress = 0,
   animationUrl,
+  riggingStatus,
+  riggingProgress = 0,
+  animationStatus,
+  animationProgress = 0,
 }: ModelViewerProps) {
   const [showGrid, setShowGrid] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -180,7 +187,13 @@ export function ModelViewer({
 
   const isBusy = status === 'queued' || status === 'running';
   const showOverlay = isBusy && progress >= 0 && progress < 100;
-  const hasAnimationUrl = !!animationUrl && animationUrl !== '';
+  const hasAnimationUrl = !!animationUrl && animationUrl !== '' && animationUrl !== null;
+
+  const isRiggingInProgress = riggingStatus === 'pending' || riggingStatus === 'in_progress';
+  const showRiggingOverlay = isRiggingInProgress && riggingProgress >= 0;
+
+  const isAnimationInProgress = animationStatus === 'pending' || animationStatus === 'in_progress';
+  const showAnimationOverlay = isAnimationInProgress && animationProgress >= 0;
 
   // Receive actions/names from child
   const setAnimationData = useCallback((actions: Record<string, any>, names: string[]) => {
@@ -280,6 +293,8 @@ export function ModelViewer({
           />
 
           <ProgressOverlay visible={showOverlay} progress={progress} label="Generation progress" />
+          <ProgressOverlay visible={showRiggingOverlay} progress={riggingProgress} label="Rigging model" />
+          <ProgressOverlay visible={showAnimationOverlay} progress={animationProgress} label="Creating animation" />
 
           <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/80 px-3 py-1.5 rounded-md backdrop-blur-sm">
             <p>Drag to rotate • Scroll to zoom • Right-click to pan</p>
@@ -287,7 +302,7 @@ export function ModelViewer({
         </div>
 
         {/* Animation Controls */}
-        {hasAnimationUrl && availableAnimations.length > 0 && (
+        {hasAnimationUrl && availableAnimations.length > 0 && animationStatus === 'completed' && (
           <div className="mt-4 space-y-2">
             <div className="flex items-center gap-2">
               <div className="flex gap-1">

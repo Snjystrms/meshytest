@@ -75,25 +75,38 @@ const Index = () => {
 
   // Handle rigging task updates
   useEffect(() => {
-    if (!riggingTaskUpdate) return;
+    if (!riggingTaskUpdate || !viewingJob?.id) return;
 
-    // Update storage with rigging task info
-    updateJob(viewingJob?.id || '', {
+    const riggingStatus =
+      riggingTaskUpdate.status === 'PENDING' ? 'pending' :
+      riggingTaskUpdate.status === 'IN_PROGRESS' ? 'in_progress' :
+      riggingTaskUpdate.status === 'SUCCEEDED' ? 'completed' : 'failed';
+
+    updateJob(viewingJob.id, {
       riggingTaskId: riggingTaskUpdate.id,
-      progress: riggingTaskUpdate.progress,
+      riggingProgress: riggingTaskUpdate.progress,
+      riggingStatus,
     });
-    
-    // If rigging is complete, save the rigged character URLs
+
+    if (viewingJob.id === currentJobId || viewingJob.riggingTaskId === riggingTaskUpdate.id) {
+      setViewingJob(prev => prev ? {
+        ...prev,
+        riggingTaskId: riggingTaskUpdate.id,
+        riggingProgress: riggingTaskUpdate.progress,
+        riggingStatus,
+      } : prev);
+    }
+
     if (riggingTaskUpdate.status === 'SUCCEEDED' && riggingTaskUpdate.result) {
-      updateJob(viewingJob?.id || '', {
+      updateJob(viewingJob.id, {
         riggedCharacterUrl: riggingTaskUpdate.result.rigged_character_fbx_url,
         walkingAnimationUrl: riggingTaskUpdate.result.basic_animations?.walking_glb_url,
         runningAnimationUrl: riggingTaskUpdate.result.basic_animations?.running_glb_url,
       });
-      
-      toast({ 
-        title: 'Rigging complete!', 
-        description: 'Your model has been successfully rigged with basic animations.' 
+
+      toast({
+        title: 'Rigging complete!',
+        description: 'Your model has been successfully rigged. You can now add animations.'
       });
     } else if (riggingTaskUpdate.status === 'FAILED') {
       toast({
@@ -102,30 +115,62 @@ const Index = () => {
         variant: 'destructive',
       });
     }
-    
+
     setRefreshTrigger((p) => p + 1);
-  }, [riggingTaskUpdate]);
+  }, [riggingTaskUpdate, viewingJob?.id]);
 
   // Handle animation task updates
   useEffect(() => {
-    if (!animationTaskUpdate) return;
+    if (!animationTaskUpdate || !viewingJob?.id) return;
 
-    // Update storage with animation task info
-    updateJob(viewingJob?.id || '', {
+    const animationStatus =
+      animationTaskUpdate.status === 'PENDING' ? 'pending' :
+      animationTaskUpdate.status === 'IN_PROGRESS' ? 'in_progress' :
+      animationTaskUpdate.status === 'SUCCEEDED' ? 'completed' : 'failed';
+
+    updateJob(viewingJob.id, {
       animationTaskId: animationTaskUpdate.id,
-      progress: animationTaskUpdate.progress,
+      animationProgress: animationTaskUpdate.progress,
+      animationStatus,
     });
-    
-    // If animation is complete, save the custom animation URL
+
+    if (viewingJob.id === currentJobId || viewingJob.animationTaskId === animationTaskUpdate.id) {
+      setViewingJob(prev => prev ? {
+        ...prev,
+        animationTaskId: animationTaskUpdate.id,
+        animationProgress: animationTaskUpdate.progress,
+        animationStatus,
+      } : prev);
+    }
+
     if (animationTaskUpdate.status === 'SUCCEEDED' && animationTaskUpdate.result) {
-      updateJob(viewingJob?.id || '', {
-        customAnimationUrl: animationTaskUpdate.result.animation_glb_url,
-      });
+      // Check if we have a valid animation URL
+      const animationUrl = animationTaskUpdate.result.animation_glb_url;
+      const hasValidAnimationUrl = !!animationUrl && animationUrl !== '';
       
-      toast({ 
-        title: 'Animation complete!', 
-        description: 'Your custom animation has been created.' 
-      });
+      if (hasValidAnimationUrl) {
+        updateJob(viewingJob.id, {
+          customAnimationUrl: animationUrl,
+        });
+
+        if (viewingJob.id === currentJobId || viewingJob.animationTaskId === animationTaskUpdate.id) {
+          setViewingJob(prev => prev ? {
+            ...prev,
+            customAnimationUrl: animationUrl,
+          } : prev);
+        }
+
+        toast({
+          title: 'Animation complete!',
+          description: 'Your custom animation is ready to play.'
+        });
+      } else {
+        // Handle case where animation task succeeded but no URL was provided
+        toast({
+          title: 'Animation completed',
+          description: 'Animation task finished, but no animation file was generated.'
+        });
+      }
     } else if (animationTaskUpdate.status === 'FAILED') {
       toast({
         title: 'Animation failed',
@@ -133,9 +178,9 @@ const Index = () => {
         variant: 'destructive',
       });
     }
-    
+
     setRefreshTrigger((p) => p + 1);
-  }, [animationTaskUpdate]);
+  }, [animationTaskUpdate, viewingJob?.id]);
 
   // Surface SSE errors
   useEffect(() => {
@@ -225,7 +270,7 @@ const Index = () => {
             status: 'queued',
             createdAt: new Date().toISOString(),
             progress: 0,
-            // Mark this as a refined model
+            isRefined: true,
             name: viewingJob?.name ? `${viewingJob.name} (Refined)` : 'Refined Model'
           };
           saveJob(newRefineJob);
@@ -265,12 +310,19 @@ const Index = () => {
       });
       
       setCurrentRiggingTaskId(response.result);
-      
-      // Update job with rigging task ID
+
       updateJob(viewingJob.id, {
         riggingTaskId: response.result,
-        progress: 0
+        riggingProgress: 0,
+        riggingStatus: 'pending'
       });
+
+      setViewingJob(prev => prev ? {
+        ...prev,
+        riggingTaskId: response.result,
+        riggingProgress: 0,
+        riggingStatus: 'pending' as const
+      } : prev);
       
       setRefreshTrigger((p) => p + 1);
     } catch (error) {
@@ -315,12 +367,19 @@ const Index = () => {
       console.log('Animation creation response:', response);
       
       setCurrentAnimationTaskId(response.result);
-      
-      // Update job with animation task ID
+
       updateJob(viewingJob.id, {
         animationTaskId: response.result,
-        progress: 0
+        animationProgress: 0,
+        animationStatus: 'pending'
       });
+
+      setViewingJob(prev => prev ? {
+        ...prev,
+        animationTaskId: response.result,
+        animationProgress: 0,
+        animationStatus: 'pending' as const
+      } : prev);
       
       setRefreshTrigger((p) => p + 1);
     } catch (error) {
@@ -393,6 +452,10 @@ const Index = () => {
                 status={viewerStatus as any}
                 progress={viewerProgress}
                 animationUrl={viewingJob?.customAnimationUrl || null}
+                riggingStatus={viewingJob?.riggingStatus}
+                riggingProgress={viewingJob?.riggingProgress}
+                animationStatus={viewingJob?.animationStatus}
+                animationProgress={viewingJob?.animationProgress}
               />
               {viewingJob && (
                 <div className="mt-6">
@@ -405,6 +468,9 @@ const Index = () => {
                     onRefine={handleRefine}
                     onRig={handleRig}
                     onAnimate={handleAnimate}
+                    isRefined={viewingJob.isRefined}
+                    riggingStatus={viewingJob.riggingStatus}
+                    animationStatus={viewingJob.animationStatus}
                   />
                 </div>
               )}

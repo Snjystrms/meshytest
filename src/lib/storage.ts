@@ -16,9 +16,16 @@ export interface StoredJob {
   type?: '3d' | 'image';
   // Add progress for real-time updates
   progress?: number;
+  // Track if this is a preview or refined model
+  isRefined?: boolean;
   // Add rigging and animation task IDs
   riggingTaskId?: string;
   animationTaskId?: string;
+  // Track rigging/animation status and progress
+  riggingStatus?: 'pending' | 'in_progress' | 'completed' | 'failed';
+  riggingProgress?: number;
+  animationStatus?: 'pending' | 'in_progress' | 'completed' | 'failed';
+  animationProgress?: number;
   // Add URLs for rigged character and animations
   riggedCharacterUrl?: string;
   walkingAnimationUrl?: string;

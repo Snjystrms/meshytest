@@ -444,11 +444,13 @@ export function streamAnimationTask(
   es.addEventListener('message', (event) => {
     try {
       const data = JSON.parse((event as MessageEvent).data) as AnimationTaskUpdate;
+      console.log('Animation SSE update:', data); // Add logging to see what we're getting
       onMessage(data);
       if (data.status === 'SUCCEEDED' || data.status === 'FAILED') {
         es.close();
       }
-    } catch {
+    } catch (e) {
+      console.error('Failed to parse animation SSE message:', e);
       /* ignore malformed chunks */
     }
   });

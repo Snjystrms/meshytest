@@ -74,6 +74,7 @@ export function useStreamAnimationTask(taskId: string | null, enabled: boolean =
     const es = streamAnimationTask(
       taskId,
       (update) => {
+        console.log('Animation task update received:', update); // Add debugging
         setIsLoading(false);
         setTaskUpdate(update);
 
@@ -85,6 +86,7 @@ export function useStreamAnimationTask(taskId: string | null, enabled: boolean =
         }
       },
       (error) => {
+        console.error('Animation task error:', error); // Add debugging
         setIsLoading(false);
         setTaskError(error);
       }

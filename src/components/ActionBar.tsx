@@ -18,17 +18,23 @@ interface ActionBarProps {
   onRefine?: (opts: { previewTaskId: string; enablePbr?: boolean; texturePrompt?: string }) => void;
   onRig?: (opts: { heightMeters: number }) => void;
   onAnimate?: (opts: { actionId: number; fps?: 24 | 25 | 30 | 60 }) => void;
+  isRefined?: boolean;
+  riggingStatus?: 'pending' | 'in_progress' | 'completed' | 'failed';
+  animationStatus?: 'pending' | 'in_progress' | 'completed' | 'failed';
 }
 
-export function ActionBar({ 
-  jobId, 
-  assetUrl, 
-  currentName, 
-  prompt, 
-  onRegenerate, 
+export function ActionBar({
+  jobId,
+  assetUrl,
+  currentName,
+  prompt,
+  onRegenerate,
   onRefine,
   onRig,
-  onAnimate
+  onAnimate,
+  isRefined = false,
+  riggingStatus,
+  animationStatus
 }: ActionBarProps) {
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [newName, setNewName] = useState(currentName);
@@ -136,19 +142,23 @@ export function ActionBar({
         Regenerate
       </Button>
 
-      {onRefine && (
+      {onRefine && !isRefined && (
         <Button onClick={handleRefine} disabled={refining}>
           <FlaskConical className="mr-2 h-4 w-4" />
           {refining ? 'Refining…' : 'Refine (PBR)'}
         </Button>
       )}
 
-      {onRig && (
+      {onRig && isRefined && (
         <Dialog open={isRiggingOpen} onOpenChange={setIsRiggingOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline">
+            <Button
+              variant="outline"
+              disabled={riggingStatus === 'in_progress' || riggingStatus === 'pending'}
+            >
               <User className="mr-2 h-4 w-4" />
-              Rig Model
+              {riggingStatus === 'in_progress' || riggingStatus === 'pending' ? 'Rigging…' :
+               riggingStatus === 'completed' ? 'Rigged' : 'Rig Model'}
             </Button>
           </DialogTrigger>
           <DialogContent>
@@ -184,12 +194,16 @@ export function ActionBar({
         </Dialog>
       )}
 
-      {onAnimate && (
+      {onAnimate && isRefined && riggingStatus === 'completed' && (
         <Dialog open={isAnimationOpen} onOpenChange={setIsAnimationOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline">
+            <Button
+              variant="outline"
+              disabled={animationStatus === 'in_progress' || animationStatus === 'pending'}
+            >
               <Play className="mr-2 h-4 w-4" />
-              Add Animation
+              {animationStatus === 'in_progress' || animationStatus === 'pending' ? 'Animating…' :
+               animationStatus === 'completed' ? 'Animated' : 'Add Animation'}
             </Button>
           </DialogTrigger>
           <DialogContent>
